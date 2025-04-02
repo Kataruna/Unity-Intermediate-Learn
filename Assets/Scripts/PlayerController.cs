@@ -1,21 +1,49 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-public class PlayerController : MonoBehaviour
+public class PlayerController : Enemy
 {
-    //TODO: Attributes
-    public Animator _animator;
-    public float _walkSpeed = 1f;
-    public float _runSpeed = 2f;
-    public float _jumpForce = 10f;
-    public Rigidbody _rigidbody;
+    #region Variable Declaration
+
+    [Header("Properties")]
+    [SerializeField, Range(0.1f, 3.0f), Tooltip("m/s")] private float _walkSpeed = 1f;
+    [SerializeField, Range(1.0f, 4.0f)] private float _runSpeed = 2f;
+    [Space(10)]
+    [SerializeField] private float _jumpForce = 10f;
 
     private Vector2 _movementInput;
-    private float _speed;
+
     private bool _isRunning = false;
+    #endregion
+
+    #region Singleton
+    private static PlayerController _instance;
+	public static PlayerController Instance {
+		get {
+			if (_instance == null) {
+				var objs = FindObjectsOfType (typeof(PlayerController)) as PlayerController[];
+				if (objs.Length > 0)
+					_instance = objs[0];
+				if (objs.Length > 1) {
+					Debug.LogError ("There is more than one " + typeof(PlayerController).Name + " in the scene.");
+				}
+				if (_instance == null) {
+					GameObject obj = new GameObject ();
+					obj.hideFlags = HideFlags.HideAndDontSave;
+					_instance = obj.AddComponent<PlayerController> ();
+				}
+			}
+			return _instance;
+		}
+	}
+    #endregion
 
     #region Input System
-    private InputSystem_Actions _input;
+    public InputSystem_Actions _input
+    {
+        get;
+        private set;
+    }
 
     void Awake()
     {
@@ -43,21 +71,20 @@ public class PlayerController : MonoBehaviour
         _movementInput = value.Get<Vector2>();
     }
 
-
     void Start()
     {
-        _input.Player.Sprint.started += ctx => {_isRunning = true; _speed = _runSpeed; _animator.SetBool("isRunning", true);};
-        _input.Player.Sprint.canceled += ctx => {_isRunning = false; _speed = _walkSpeed; _animator.SetBool("isRunning", false);};
+        _input.Player.Sprint.started += ctx => {_isRunning = true; _animator.SetBool("isRunning", true);};
+        _input.Player.Sprint.canceled += ctx => {_isRunning = false; _animator.SetBool("isRunning", false);};
         _input.Player.Jump.performed += ctx => {_rigidbody.AddForce(Vector3.up * _jumpForce, ForceMode.Impulse); _animator.SetTrigger("jump");};
     }
 
     // TODO: Make it easier to read
     void FixedUpdate()
     {
-        Vector3 movement = new Vector3(_movementInput.x, 0, _movementInput.y);
-        movement *= _speed * 0.1f;
-        transform.Translate(movement, Space.Self);
-
+        _speed = _isRunning ? _runSpeed : _walkSpeed;
+        
+        Movement();
+        
         if (_movementInput != Vector2.zero)
         {
             _animator.SetBool("isWalking", true);
@@ -72,6 +99,21 @@ public class PlayerController : MonoBehaviour
         if (direction != Vector3.zero)
         {
             _animator.transform.forward = direction;
+        }
+    }
+
+    protected override void Movement()
+    {
+        Vector3 movement = new Vector3(_movementInput.x, 0, _movementInput.y);
+        movement *= _speed * 0.1f;
+        transform.Translate(movement, Space.Self);
+    }
+
+    void OnCollisionEnter(Collision other)
+    {
+        if(other.gameObject.TryGetComponent<ICollectable>(out ICollectable item))
+        {
+            item.Collect();
         }
     }
 }
